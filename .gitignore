@@ -1,0 +1,72 @@
+# -------------------------------
+# Python & Flask Project
+# -------------------------------
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+.venv/
+env/
+venv/
+ENV/
+
+# Environment & credentials
+.env
+*.env
+*.key
+*.pem
+
+# VS Code & IDE settings
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Logs & database
+*.log
+*.sqlite3
+instance/
+db.sqlite3
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Flask / Deployment cache
+*.pid
+*.bak
+*.swp
+
+# Compiled assets
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.so
+*.dll
+*.bin
+
+# Node (if used by front-end)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build / Distribution
+build/
+dist/
+*.egg-info/
+.eggs/
+
+
+
+
+# Backup / Temp files
+*.zip
+*.tar.gz
+*.tmp
+*.bak
+*.old
