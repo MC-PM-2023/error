@@ -13,9 +13,6 @@ from flask import Flask, request, jsonify
 from sqlalchemy import create_engine
 import traceback
 from sqlalchemy.sql import text
-# ---------- DB CONFIG (via Cloud SQL socket) ----------
-from db_config import enginea, engine, tgt_engine
-
 # from flask_sqlalchemy import SQLAlchemy
 
 # db = SQLAlchemy()# Ensure consistent import
@@ -46,18 +43,7 @@ app.secret_key = 'vasanth'
 
 # MySQL Config
 #app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://appsadmin:appsadmin2025@34.93.75.171:3306/elicita'
-#app.config['SQLALCHEMY_DATABASE_URI'] = f"mysql+pymysql://{USERNAME}:{PASSWORD}@{HOST}:{PORT}/{DB_NAME}"
-import os
-from urllib.parse import quote_plus
-INSTANCE = os.getenv("INSTANCE_CONNECTION_NAME")
-DB_USER  = os.getenv("DB_USER", "appsadmin")
-DB_PASS  = quote_plus(os.getenv("DB_PASS", ""))
-DB_NAME  = os.getenv("DB_NAME_ANALYTICA", "elicita")   # store users in 'elicita' schema (adjust if needed)
-
-app.config['SQLALCHEMY_DATABASE_URI'] = (
-    f"mysql+pymysql://{DB_USER}:{DB_PASS}@/{DB_NAME}"
-    f"?charset=utf8mb4&unix_socket=/cloudsql/{INSTANCE}"
-)
+app.config['SQLALCHEMY_DATABASE_URI'] = f"mysql+pymysql://{USERNAME}:{PASSWORD}@{HOST}:{PORT}/{DB_NAME}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 SMTP_SERVER = "smtp.datasolve-analytics.com"
 SMTP_PORT = 587
