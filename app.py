@@ -27,7 +27,7 @@ DB_DRIVER = "pymysql"
 
 DB_USER = os.getenv("DB_USER", "appsadmin")
 DB_PASS = os.getenv("DB_PASS", "appsadmin2025")
-DB_HOST = os.getenv("DB_HOST", "34.93.75.171")
+DB_HOST = os.getenv("DB_HOST", "10.19.64.3")
 DB_PORT = os.getenv("DB_PORT", "3306")
 
 TGT_DB          = os.getenv("TGT_DB", "InSolvo_Documents")

@@ -1,33 +1,32 @@
 runtime: python311
+service: default
 instance_class: F1
-
 entrypoint: gunicorn -b :$PORT app:app
 
-handlers:
-  - url: /static
-    static_dir: static
-
-  - url: /.*
-    script: auto
-
 env_variables:
-  # Database Credentials
   DB_USER: "appsadmin"
   DB_PASS: "appsadmin2025"
-  DB_HOST: "34.93.75.171"
+  DB_NAME: "elicita"
+  DB_HOST: "10.19.64.3"     # Your SQL Private IP
   DB_PORT: "3306"
 
-  # Database Names
   TGT_DB: "InSolvo_Documents"
-  DB_NAME: "elicita"
   DATABASE_NAME: "mc"
   DATABASE_NAME_A: "elicita"
-
-  # Flask Secret Key
   SECRET_KEY: "vasanth"
 
-  # SMTP Mail Credentials
   SMTP_SERVER: "smtp.datasolve-analytics.com"
   SMTP_PORT: "587"
   WEBMAIL_USER: "apps.admin@datasolve-analytics.com"
   WEBMAIL_PASSWORD: "datasolve@2025"
+
+vpc_access_connector:
+  name: "projects/theta-messenger-459613-p7/locations/asia-south1/connectors/appengine-connector"
+  egress_setting: PRIVATE_RANGES_ONLY
+
+handlers:
+- url: /static
+  static_dir: static
+
+- url: /.*
+  script: auto
