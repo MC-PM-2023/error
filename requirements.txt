@@ -9,6 +9,7 @@ blinker==1.9.0
 # ───── Database / ORM ─────
 Flask-SQLAlchemy==3.1.1
 SQLAlchemy==2.0.41
+PyMySQL==1.1.1
 typing_extensions==4.14.1
 
 # ───── Date / Time ─────
@@ -17,9 +18,8 @@ tzdata==2025.2
 python-dateutil==2.9.0.post0
 six==1.17.0
 
-# ───── Data handling (optional; include if you use pandas) ─────
+# ───── Data handling (pandas needed because you use read_sql) ─────
 pandas==2.2.3
 
-# ───── Email + misc ─────
+# ───── Email + Server ─────
 gunicorn==22.0.0
-PyMySQL==1.1.1

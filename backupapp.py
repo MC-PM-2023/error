@@ -1,172 +1,134 @@
-import os
+from flask import Flask, render_template, request, redirect
+import pandas as pd
+from sqlalchemy import create_engine, text
+from flask import Blueprint, render_template, request, redirect, url_for, session, flash
+from werkzeug.security import generate_password_hash, check_password_hash
+from models import db, User
 import random
 import smtplib
-import traceback
-import hashlib
-
-import pandas as pd
-from functools import wraps
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from functools import wraps
+from flask import Flask, request, jsonify
+from sqlalchemy import create_engine
+import traceback
+from sqlalchemy.sql import text
+# from flask_sqlalchemy import SQLAlchemy
 
-from flask import (
-    Flask, render_template, request, redirect,
-    url_for, session, flash, jsonify
-)
-from werkzeug.security import generate_password_hash, check_password_hash
+# db = SQLAlchemy()# Ensure consistent import
+import configparser
+# ---------- DB CONFIG ----------
+DATABASE_TYPE = 'mysql'
+DB_DRIVER = 'pymysql'
+USERNAME = 'appsadmin'
+#USERNAME ='datasolve'
+#PASSWORD ='datasolve@2025'
+PASSWORD = 'appsadmin2025'
+HOST = '34.93.75.171'
+PORT = '3306'
+TGT_DB = 'InSolvo_Documents' # DB_NAME also same for check we use DB_NAME
+TABLE_NAME = 'insolvo_error_tracker'
+DB_NAME = 'elicita'
+DATABASE_NAME = 'mc'
+DATABASE_NAME_A = 'elicita'
 
-from sqlalchemy import create_engine, text
+# ---------- ENGINE ----------
+enginea = create_engine(f"{DATABASE_TYPE}+{DB_DRIVER}://{USERNAME}:{PASSWORD}@{HOST}:{PORT}/{DATABASE_NAME_A}") #Analytica engine
+engine = create_engine(f"{DATABASE_TYPE}+{DB_DRIVER}://{USERNAME}:{PASSWORD}@{HOST}:{PORT}/{DATABASE_NAME}")#Inslovo engine
+tgt_engine = create_engine(f"mysql+pymysql://{USERNAME}:{PASSWORD}@{HOST}:{PORT}/{TGT_DB}")#insolvo_error_tracker engine
 
-from models import db, User  # <- your existing models.py
-
-# ---------------------------------------------------------------------
-#  ENV / CONFIG  (reads from app.yaml in App Engine)
-# ---------------------------------------------------------------------
-DATABASE_TYPE = "mysql"
-DB_DRIVER = "pymysql"
-
-DB_USER = os.getenv("DB_USER", "appsadmin")
-DB_PASS = os.getenv("DB_PASS", "appsadmin2025")
-DB_HOST = os.getenv("DB_HOST", "34.93.75.171")
-DB_PORT = os.getenv("DB_PORT", "3306")
-
-TGT_DB          = os.getenv("TGT_DB", "InSolvo_Documents")
-DB_NAME         = os.getenv("DB_NAME", "elicita")       # For SQLAlchemy db
-DATABASE_NAME   = os.getenv("DATABASE_NAME", "mc")      # Insolvo log
-DATABASE_NAME_A = os.getenv("DATABASE_NAME_A", "elicita")  # Analytica log
-
-SMTP_SERVER      = os.getenv("SMTP_SERVER", "smtp.datasolve-analytics.com")
-SMTP_PORT        = int(os.getenv("SMTP_PORT", "587"))
-WEBMAIL_USER     = os.getenv("WEBMAIL_USER", "apps.admin@datasolve-analytics.com")
-WEBMAIL_PASSWORD = os.getenv("WEBMAIL_PASSWORD", "datasolve@2025")
-
-SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me")
-
-# ---------------------------------------------------------------------
-#  ENGINES
-# ---------------------------------------------------------------------
-# Analytica engine (elicita DB)
-enginea = create_engine(
-    f"{DATABASE_TYPE}+{DB_DRIVER}://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DATABASE_NAME_A}"
-)
-
-# Insolvo engine (mc DB)
-engine = create_engine(
-    f"{DATABASE_TYPE}+{DB_DRIVER}://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DATABASE_NAME}"
-)
-
-# Error tracker engine (InSolvo_Documents DB)
-tgt_engine = create_engine(
-    f"{DATABASE_TYPE}+{DB_DRIVER}://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{TGT_DB}"
-)
-
-# ---------------------------------------------------------------------
-#  FLASK APP
-# ---------------------------------------------------------------------
 app = Flask(__name__)
-app.secret_key = SECRET_KEY
+# ---------- login ----------
+app.secret_key = 'vasanth'
 
-# Main SQLAlchemy DB bind (elicita DB with User model)
-app.config["SQLALCHEMY_DATABASE_URI"] = (
-    f"mysql+{DB_DRIVER}://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-)
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-
+# MySQL Config
+#app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://appsadmin:appsadmin2025@34.93.75.171:3306/elicita'
+app.config['SQLALCHEMY_DATABASE_URI'] = f"mysql+pymysql://{USERNAME}:{PASSWORD}@{HOST}:{PORT}/{DB_NAME}"
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+SMTP_SERVER = "smtp.datasolve-analytics.com"
+SMTP_PORT = 587
+WEBMAIL_USER = "apps.admin@datasolve-analytics.com"
+WEBMAIL_PASSWORD = "datasolve@2025"
+#der
+# Initialize db(profile)
 db.init_app(app)
-
-# ---------------------------------------------------------------------
-#  PROFILE MODEL (other schema: mainapp)
-# ---------------------------------------------------------------------
+# ── PROFILE MODEL (lives in another schema: mainapp) ─────────────
 class UserProfile(db.Model):
     __tablename__  = "User_Profiles"
-    __table_args__ = {"extend_existing": True, "schema": "mainapp"}
+    __table_args__ = {"extend_existing": True, "schema": "mainapp"}  # <- important
 
-    Email_ID    = db.Column(db.String(255), primary_key=True)
-    Image_URL   = db.Column(db.Text)
-    Designation = db.Column(db.String(200))
-    Team        = db.Column(db.String(100))
+    # If the table has no PK, Email_ID is a safe choice
+    Email_ID  = db.Column(db.String(255), primary_key=True)
+    Image_URL = db.Column(db.Text)
+    Designation  = db.Column(db.String(200))
+    Team         = db.Column(db.String(100))
 
-# ---------------------------------------------------------------------
-#  RESPONSE / CACHE HEADERS
-# ---------------------------------------------------------------------
+# Prevent browser caching
 @app.after_request
 def add_header(response):
-    response.headers["Cache-Control"] = (
-        "no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0"
-    )
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "-1"
     return response
 
-# ---------------------------------------------------------------------
-#  AUTH HELPERS
-# ---------------------------------------------------------------------
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if "username" not in session:
+        if 'username' not in session:
             flash("Please log in first.")
-            return redirect("/login")
+            return redirect('/login')
         return f(*args, **kwargs)
     return decorated_function
 
-# ---------------------------------------------------------------------
-#  BASIC ROUTES
-# ---------------------------------------------------------------------
-@app.route("/")
+@app.route('/')
 def home():
-    return redirect("/login")
-
-@app.route("/welcome")
+    return redirect('/login')
+@app.route('/welcome')
 @login_required
 def welcome():
-    username = session.get("username")
-    return render_template("welcome.html", username=username)
+    username = session.get("username")  # if you stored it in session
 
-# ---------------------------------------------------------------------
-#  OTP / VERIFY / REGISTER
-# ---------------------------------------------------------------------
-@app.route("/verify", methods=["GET", "POST"])
+
+    return render_template(
+        "welcome.html",
+        username=username
+    )
+
+
+@app.route('/verify', methods=['GET', 'POST'])
 def verify():
-    if request.method == "POST":
-        otp = request.form.get("otp")
+    if request.method == 'POST':
+        otp = request.form['otp']
 
-        if "verification_code" in session and str(session["verification_code"]) == otp:
-            email = session.get("email")
+        if 'verification_code' in session and str(session['verification_code']) == otp:
+            email = session.get('email')
             user = db.session.query(User).filter_by(email=email).first()
             if user:
                 user.verified = True
-                user.verification_code = None
+                user.verification_code = None  # Clear the OTP after successful verification
                 db.session.commit()
 
-                session.pop("email", None)
-                session.pop("verification_code", None)
+                session.pop('email', None)
+                session.pop('verification_code', None)
 
-                return render_template(
-                    "login.html",
-                    success="Your account has been verified successfully!",
-                )
-            return render_template("verify.html", error="User not found or verification error.")
+                return render_template('login.html', success="Your account has been verified successfully!")
+            return render_template('verify.html', error="User not found or verification error.")
 
-    return render_template("verify.html")
-
-@app.route("/register", methods=["GET", "POST"])
+    return render_template('verify.html')
+@app.route('/register', methods=['GET', 'POST'])
 def register():
-    allowed_domain = "datasolve-analytics.com"
+    if request.method == 'POST':
+        username = request.form['username']
+        email = request.form['email']
+        password = request.form['password']
 
-    if request.method == "POST":
-        username = request.form.get("username", "").strip()
-        email    = request.form.get("email", "").strip()
-        password = request.form.get("password", "")
-
-        # Only allow datasolve-analytics.com emails
+        # ✅ Only allow emails from @datasolve-analytics.com
+        allowed_domain = "datasolve-analytics.com"
         if not email.endswith(f"@{allowed_domain}"):
-            return render_template(
-                "register.html",
-                error="Only datasolve-analytics.com emails are allowed."
-            )
+            return render_template('register.html', error="Only datasolve-analytics.com emails are allowed.")
 
-        hashed_password   = generate_password_hash(password)
+        hashed_password = generate_password_hash(password)
         verification_code = random.randint(100000, 999999)
 
         # Check if username or email already exists
@@ -174,34 +136,30 @@ def register():
             (User.username == username) | (User.email == email)
         ).first()
         if existing_user:
-            return render_template(
-                "register.html",
-                error="Username or email already exists."
-            )
+            return render_template('register.html', error="Username or email already exists.")
 
+        # Create new user
         new_user = User(
             username=username,
             email=email,
             password=hashed_password,
             verification_code=verification_code,
-            verified=False,
+            verified=False
         )
+
         db.session.add(new_user)
         db.session.commit()
 
-        # Send OTP
+        # Send OTP for verification
         send_otp_email(email, verification_code)
 
-        session["email"] = email
-        session["verification_code"] = verification_code
+        # Store verification details in session
+        session['email'] = email
+        session['verification_code'] = verification_code
 
-        return redirect(url_for("verify"))
+        return redirect(url_for('verify'))
 
-    # GET
-    return render_template(
-        "register.html",
-        error="Only datasolve-analytics.com emails are allowed."
-    )
+    return render_template('register.html', error="Only datasolve-analytics.com emails are allowed.")
 
 def send_otp_email(email, otp):
     try:
@@ -216,9 +174,8 @@ def send_otp_email(email, otp):
             </body>
         </html>
         """
-
         msg = MIMEMultipart("alternative")
-        msg["From"] = f"InSolvo App <{WEBMAIL_USER}>"
+        msg["From"] = f"Your App <{WEBMAIL_USER}>"
         msg["To"] = email
         msg["Subject"] = subject
         msg.attach(MIMEText(plain_text, "plain"))
@@ -231,39 +188,39 @@ def send_otp_email(email, otp):
 
     except Exception as error:
         print("Error sending OTP email:", error)
-        traceback.print_exc()
 
-# ---------------------------------------------------------------------
-#  LOGIN / LOGOUT
-# ---------------------------------------------------------------------
-@app.route("/login", methods=["GET", "POST"])
+@app.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == "POST":
-        username = request.form.get("username", "").strip()
-        pwd      = request.form.get("password", "")
+    if request.method == 'POST':
+        username = request.form['username']
+        pwd = request.form['password']
 
         user = User.query.filter_by(username=username, verified=True).first()
         if user and check_password_hash(user.password, pwd):
-            session["username"] = user.username
-            session["role"]     = user.role
-            session["email"]    = user.email
-            return redirect("/welcome")
+            session['username'] = user.username
+            session['role'] = user.role
+            session['email'] = user.email 
+            return redirect('/welcome')  # <--- Always redirect to Driver App Main Page
         else:
             flash("❌ Invalid credentials or not verified.")
-    return render_template("login.html")
+    return render_template('login.html')
+# @app.route('/driver')
+# @login_required
+# def driver_home():
+#     return render_template('driver.html', username=session['username'], role=session.get('role'))
 
-@app.route("/logout")
+
+@app.route('/logout')
 def logout():
     session.clear()
-    return redirect("/login")
+    return redirect('/login')
 
-# ---------------------------------------------------------------------
-#  FORGOT / RESET PASSWORD
-# ---------------------------------------------------------------------
-@app.route("/forgot-password", methods=["GET", "POST"])
+
+
+@app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
-    if request.method == "POST":
-        email = request.form.get("email", "").strip()
+    if request.method == 'POST':
+        email = request.form['email']
         user = db.session.query(User).filter_by(email=email, verified=True).first()
 
         if user:
@@ -272,65 +229,62 @@ def forgot_password():
             db.session.commit()
 
             send_otp_email(email, reset_code)
-            session["reset_email"] = email
+            session['reset_email'] = email
 
             flash("An OTP has been sent to your email to reset your password.", "info")
-            return redirect(url_for("reset_password"))
+            return redirect(url_for('reset_password'))
         else:
-            return render_template(
-                "forgot_password.html",
-                error="No verified account found with this email."
-            )
+            return render_template('forgot_password.html', error="No verified account found with this email.")
 
-    return render_template("forgot_password.html")
+    return render_template('forgot_password.html')
 
-@app.route("/reset-password", methods=["GET", "POST"])
+        
+# Reset Password Route
+@app.route('/reset-password', methods=['GET', 'POST'])
 def reset_password():
-    if request.method == "POST":
-        otp          = request.form.get("otp", "")
-        new_password = request.form.get("new_password", "")
+    if request.method == 'POST':
+        otp = request.form['otp']
+        new_password = request.form['new_password']
 
-        if "reset_email" in session:
-            email = session["reset_email"]
-            user  = db.session.query(User).filter_by(email=email).first()
+        if 'reset_email' in session:
+            email = session['reset_email']
+            user = db.session.query(User).filter_by(email=email).first()
 
             if user and str(user.verification_code) == otp:
                 user.password = generate_password_hash(new_password)
                 user.verification_code = None
                 db.session.commit()
 
-                session.pop("reset_email", None)
+                session.pop('reset_email', None)
                 flash("Your password has been reset. Please log in.", "success")
-                return redirect(url_for("login"))
+                return redirect(url_for('login'))
             else:
-                return render_template(
-                    "reset_password.html",
-                    error="Invalid OTP or email."
-                )
-    return render_template("reset_password.html")
+                return render_template('reset_password.html', error="Invalid OTP or email.")
+    
+    return render_template('reset_password.html')
 
-# ---------------------------------------------------------------------
-#  HELPERS
-# ---------------------------------------------------------------------
-def clean_time_fields(df: pd.DataFrame) -> pd.DataFrame:
-    """Remove '0 days ' from Start_Time, End_Time, Runtime."""
-    for field in ["Start_Time", "End_Time", "Runtime"]:
+
+# ---------- HELPERS ----------
+def clean_time_fields(df):
+    # Remove '0 days ' from Start_Time, End_Time, Runtime
+    for field in ['Start_Time', 'End_Time', 'Runtime']:
         if field in df.columns:
-            df[field] = df[field].astype(str).str.replace("0 days ", "", regex=False)
+            df[field] = df[field].astype(str).str.replace('0 days ', '', regex=False)
     return df
+### ── HELPERS image ───────────────────────────────────────────────────────────────
 
+import hashlib
 def get_profile_for_email(email: str):
-    """Return (Designation, Team, Image_URL) for an email from mainapp.User_Profiles."""
+    """Return (role_from_profile, team_from_profile, image_url) for an email."""
     if not email:
         return None, None, None
-    rec = (
-        db.session.query(UserProfile.Designation, UserProfile.Team, UserProfile.Image_URL)
-        .filter(UserProfile.Email_ID == email)
-        .first()
-    )
+    rec = (db.session.query(UserProfile.Designation, UserProfile.Team, UserProfile.Image_URL)
+           .filter(UserProfile.Email_ID == email)
+           .first())
     if not rec:
         return None, None, None
     return rec[0], rec[1], rec[2]
+
 
 def gravatar_url(email: str, size=64, default="identicon"):
     if not email:
@@ -341,63 +295,56 @@ def gravatar_url(email: str, size=64, default="identicon"):
 @app.context_processor
 def inject_gravatar():
     return dict(gravatar_url=gravatar_url)
-
 @app.context_processor
 def inject_profile_image():
     """
     Make user_email + profile_image_url available in ALL templates.
-    Uses session['email']; falls back to DB lookup by username.
+    Uses session['email'] first; falls back to DB lookup by username.
+    Also fetches Image_URL from mainapp.User_Profiles for the avatar.
     """
     img_url = None
     display_name = session.get("username")
     email = session.get("email")
 
     try:
+        # fallback: get email from DB if not in session
         if not email and display_name:
             u = User.query.filter_by(username=display_name).first()
             email = u.email if u else None
 
+        # lookup profile image by email
         if email:
-            rec = (
-                db.session.query(UserProfile.Image_URL)
-                .filter(UserProfile.Email_ID == email)
-                .first()
-            )
+            rec = (db.session.query(UserProfile.Image_URL)
+                   .filter(UserProfile.Email_ID == email)
+                   .first())
             if rec and rec[0]:
                 img_url = rec[0]
     except Exception as e:
         app.logger.exception("Profile inject failed: %s", e)
 
     return {
-        "user_email": email,
+        "user_email": email,            # 👈 now available everywhere
         "profile_image_url": img_url,
         "profile_name": display_name,
     }
-
-# ---------------------------------------------------------------------
-#  ERROR TRACKER MAIN VIEW (/file)
-# ---------------------------------------------------------------------
-@app.route("/file")
+# ---------- ROUTES ----------
+@app.route('/file')
 @login_required
 def index():
-    df = pd.read_sql(f"SELECT * FROM {TGT_DB}.{ 'insolvo_error_tracker' }", tgt_engine)
+    df = pd.read_sql(f"SELECT * FROM {TABLE_NAME}", tgt_engine)
     df = clean_time_fields(df)
-    return render_template(
-        "tracker.html",
-        data=df.to_dict(orient="records"),
-        username=session.get("username"),
-    )
+    return render_template('tracker.html', data=df.to_dict(orient='records'), username=session.get('username'))
 
-@app.route("/approve", methods=["POST"])
+@app.route('/approve', methods=['POST'])
 @login_required
 def approve():
-    row_id    = request.form["id"]
-    solution  = request.form.get("solution", "").strip()
-    developer = request.form.get("developer", "").strip()
-    remarks   = request.form.get("remarks", "").strip()
+    row_id = request.form['id']
+    solution = request.form['solution'].strip()
+    developer = request.form['developer'].strip()
+    remarks = request.form['remarks'].strip()
 
     query = text(f"""
-        UPDATE {TGT_DB}.insolvo_error_tracker
+        UPDATE {TABLE_NAME}
         SET Solution = :solution,
             Developer = :developer,
             Remarks = :remarks
@@ -405,52 +352,42 @@ def approve():
     """)
 
     with tgt_engine.begin() as conn:
-        conn.execute(
-            query,
-            {
-                "solution": solution,
-                "developer": developer,
-                "remarks": remarks,
-                "row_id": row_id,
-            },
-        )
+        conn.execute(query, {
+            "solution": solution,
+            "developer": developer,
+            "remarks": remarks,
+            "row_id": row_id
+        })
 
-    return redirect("/file")
-
-# ---------------------------------------------------------------------
-#  INSOLVO LOGS (/log)
-# ---------------------------------------------------------------------
-@app.route("/log")
+    return redirect('/file')
+# ---------- Insolvo log ----------
+@app.route('/log')
 def log_page_with_data():
-    if "fetch_data" in request.args:
+    if 'fetch_data' in request.args:
         query = """
             SELECT
                 id AS ID,
-                Users AS Username,
+                Users as Username,
                 tool_name AS Tool_Name,
                 status AS Status,
                 start_date AS Tool_Start_Date,
                 start_time AS Exec_Start_Time,
                 end_time AS Exec_End_Time,
                 runtime AS Duration
+                
             FROM mc.`mc.desktop_user`
-            ORDER BY start_date DESC
+            ORDER BY start_date DESC  -- Add this line to order by Tool_Start_Date descending
         """
         try:
             with engine.connect() as connection:
                 result = pd.read_sql(query, connection)
-
-            # ensure JSON-friendly types
-            for col in result.columns:
-                if pd.api.types.is_timedelta64_dtype(result[col]):
-                    result[col] = result[col].astype(str)
-
-            return jsonify(result.to_dict(orient="records"))
+            return jsonify(result.to_dict(orient='records'))
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
-    # HTML (unchanged)
-    return '''  <!DOCTYPE html>
+    # Serve the frontend HTML
+    return '''
+   <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -693,18 +630,17 @@ def log_page_with_data():
 </script>
 </body>
 </html>
-'''
 
-# ---------------------------------------------------------------------
-#  ANALYTICA LOGS (/loga)
-# ---------------------------------------------------------------------
-@app.route("/loga")
+
+    '''
+# ---------- Analytica log ----------
+@app.route('/loga')
 def log_page_with_dataa():
-    if "fetch_data" in request.args:
+    if 'fetch_data' in request.args:
         query = """
             SELECT 
                 id AS ID,
-                Users AS Username,
+                Users as Username,
                 tool_name AS Tool_Name,
                 status AS Status,
                 start_date AS Tool_Start_Date,
@@ -718,17 +654,20 @@ def log_page_with_dataa():
             with enginea.connect() as connection:
                 result = pd.read_sql(query, connection)
 
-            for col in result.columns:
-                if pd.api.types.is_timedelta64_dtype(result[col]):
-                    result[col] = result[col].astype(str)
+                # 🔧 Fix: Convert Timedelta to string for JSON compatibility
+                for col in result.columns:
+                    if pd.api.types.is_timedelta64_dtype(result[col]):
+                        result[col] = result[col].astype(str)
 
-            return jsonify(result.to_dict(orient="records"))
+                return jsonify(result.to_dict(orient='records'))
         except Exception as e:
             print("ERROR FETCHING LOGS:", e)
             return jsonify({"error": str(e)}), 500
 
-    # HTML (unchanged)
-    return '''   <!DOCTYPE html>
+
+    # Serve the frontend HTML
+    return '''
+   <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -967,11 +906,12 @@ def log_page_with_dataa():
   </script>
 </body>
 </html>
-'''
 
-# ---------------------------------------------------------------------
-#  MAIN (local dev only)
-# ---------------------------------------------------------------------
-if __name__ == "__main__":
-    # For local testing only. In App Engine, gunicorn runs this app.
-    app.run(host="0.0.0.0", port=5008, debug=True)
+
+    '''
+
+# ---------- MAIN ----------
+# if __name__ == '__main__':
+#     app.run(host='0.0.0.0', port=5000)
+if __name__ == '__main__':
+    app.run(debug=True, port=5008)
